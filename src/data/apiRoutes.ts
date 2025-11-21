@@ -5,6 +5,7 @@ import {
   DeviceResponse,
   SpotifyNowPlaying,
   SpotifyPlaylistResponse,
+  ArtistTopTracksResponse,
 } from "./responseTypes";
 
 /**
@@ -34,6 +35,9 @@ export function getAPIPathMap() {
       },
       "get:search": {
         response: {} as SearchResponse,
+      },
+      "get:artists/:id/top-tracks": {
+        response: {} as ArtistTopTracksResponse,
       },
     },
   } as const;

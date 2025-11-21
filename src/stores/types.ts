@@ -4,6 +4,7 @@ import {
   DeviceResponse,
   SpotifyNowPlaying,
   SpotifyPlaylistResponse,
+  ArtistTopTracksResponse,
 } from "@/data/responseTypes";
 
 export type AppStore = {
@@ -17,6 +18,7 @@ export type AppStore = {
     nowPlaying: SpotifyNowPlaying | null;
     isSidebarVisible: boolean;
     playlists: SpotifyPlaylistResponse | null;
+    artistTopTracks: ArtistTopTracksResponse | null;
   };
   setSearch: (search: SearchResponse | null) => void;
   setSearchInput: (searchInput: string) => void;
@@ -28,4 +30,5 @@ export type AppStore = {
   setSelectedDevice: (selectedDevice: string | null) => void;
   setIsSidebarVisible: (isSidebarVisible: boolean) => void;
   setPlaylists: (playlists: SpotifyPlaylistResponse | null) => void;
+  setArtistTopTracks: (artistTopTracks: ArtistTopTracksResponse | null) => void;
 };

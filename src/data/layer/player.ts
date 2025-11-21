@@ -73,3 +73,27 @@ export const addToQueue = async ({ uri }: { uri: string }) => {
     revalidateKey: "music-queue",
   });
 };
+
+export const getArtistTopTracks = async ({
+  artistId,
+}: {
+  artistId: string;
+}) => {
+  const accessToken = await getAccessToken();
+  return DataRequest({
+    url: "v1:get:artists/:id/top-tracks",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    params: {
+      id: artistId,
+    },
+    query: {
+      market: "ID",
+    },
+    useCache: false,
+    cacheKey: `artist-top-tracks-${artistId}`,
+    revalidateTime: 3600, // Cache for 1 hour
+    responseTime: (time) => console.log("getArtistTopTracks", time, "ms"),
+  });
+};

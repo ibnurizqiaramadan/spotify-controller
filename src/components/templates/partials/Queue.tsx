@@ -62,28 +62,36 @@ export default function Queue() {
 
   return (
     <div
-      className={`flex flex-col bg-zinc-900 overflow-auto rounded-lg h-full p-2 ${
+      className={`flex flex-col bg-gradient-to-b from-zinc-900/95 to-zinc-900/90 rounded-xl h-full p-3 shadow-xl border border-zinc-800/50 backdrop-blur-sm overflow-hidden ${
         app.isSidebarVisible === false &&
         (app.search?.tracks?.items.length ?? 0) > 0
           ? "hidden"
           : ""
       }`}
     >
-      <div className="overflow-y-auto max-h-[calc(100dvh-186px)] max-w-[calc(100%)] overflow-hidden text-ellipsis whitespace-nowrap">
+      <div className="overflow-y-auto flex-1 min-h-0 max-w-full">
         {app?.queue?.queue?.length && app?.queue?.queue?.length > 0 && (
           <>
-            <div>
-              <h4 className="text-large font-bold p-2">Now Playing</h4>
+            <div className="mb-4">
+              <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
+                <span className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-400 rounded-full"></span>
+                Now Playing
+              </h4>
               {app?.queue?.currently_playing && (
-                <QueueItem
-                  key={app.queue.currently_playing.id}
-                  item={app.queue.currently_playing}
-                  currentPlaying={true}
-                />
+                <div className="bg-zinc-800/50 rounded-lg p-1 border border-green-500/20">
+                  <QueueItem
+                    key={app.queue.currently_playing.id}
+                    item={app.queue.currently_playing}
+                    currentPlaying={true}
+                  />
+                </div>
               )}
             </div>
             <div>
-              <h4 className="text-large font-bold p-2">Next Queue</h4>
+              <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
+                <span className="w-1 h-6 bg-gradient-to-b from-zinc-500 to-zinc-400 rounded-full"></span>
+                Next Queue
+              </h4>
               {app?.queue?.queue?.map((item, index) => (
                 <QueueItem key={index} item={item} />
               ))}

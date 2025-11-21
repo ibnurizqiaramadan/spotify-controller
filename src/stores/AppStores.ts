@@ -12,6 +12,7 @@ export const appStore = create<AppStore>((set) => ({
     nowPlaying: null,
     isSidebarVisible: false,
     playlists: null,
+    artistTopTracks: null,
   },
   setSearch: (search) => set((state) => ({ app: { ...state.app, search } })),
   setSearchInput: (searchInput) =>
@@ -30,4 +31,6 @@ export const appStore = create<AppStore>((set) => ({
     set((state) => ({ app: { ...state.app, isSidebarVisible } })),
   setPlaylists: (playlists) =>
     set((state) => ({ app: { ...state.app, playlists } })),
+  setArtistTopTracks: (artistTopTracks) =>
+    set((state) => ({ app: { ...state.app, artistTopTracks } })),
 }));

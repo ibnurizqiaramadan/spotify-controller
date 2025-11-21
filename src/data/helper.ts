@@ -93,14 +93,16 @@ async function fetchAPI<URL extends API_PATH>({
   try {
     const version = url.split(":")[0];
     const method = url.split(":")[1];
-    const apiPath = url.split(":").slice(2).join("");
-    const parsedUrl = apiPath.replace(/:(\w+)/g, (_, param) => params[param]);
+    const apiPath = url.split(":").slice(2).join(":");
+    const parsedUrl = apiPath.replace(/:(\w+)/g, (_, param) => {
+      return params[param] || `:${param}`;
+    });
     const apiUrl = process.env[`SPOTIFY_API_BASE_URL_${version.toUpperCase()}`];
     const queryString = new URLSearchParams(query).toString();
     const fullUrl =
       apiPath === "api/token"
         ? `https://accounts.spotify.com/api/token`
-        : `${apiUrl}/${parsedUrl}?${queryString}`;
+        : `${apiUrl}/${parsedUrl}${queryString ? `?${queryString}` : ""}`;
 
     const startTime = Date.now();
 

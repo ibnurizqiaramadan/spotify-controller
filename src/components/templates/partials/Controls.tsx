@@ -5,7 +5,6 @@ import Image from "next/image";
 import { appStore } from "@/stores/AppStores";
 import { getNowPlaying } from "@/data/layer/player";
 import { useCallback, useEffect, useState, useMemo } from "react";
-import ListDevice from "@/components/controls/ListDevice";
 
 const formatTime = (ms: number): string => {
   const totalSeconds = Math.floor(ms / 1000);
@@ -71,7 +70,7 @@ export default function Controls() {
   }, [fetchNowPlaying]);
 
   return (
-    <div className="flex flex-row justify-between items-center bg-zinc-900 rounded-lg max-h-[80px] flex-grow min-h-[80px] p-2 px-3">
+    <div className="flex flex-row justify-between items-center bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-900 rounded-xl shadow-2xl border border-zinc-800/50 max-h-[90px] flex-grow min-h-[90px] p-3 px-4 backdrop-blur-sm">
       <div
         className="
         hidden
@@ -85,24 +84,28 @@ export default function Controls() {
         md:w-1/2
         sm:flex
         sm:w-1/2
+        gap-3
         "
       >
         {app?.nowPlaying?.item?.album?.images[0].url ? (
           <>
-            <Image
-              className="rounded-lg"
-              src={app.nowPlaying.item.album.images[0].url}
-              alt="Spotify"
-              width={60}
-              height={60}
-            />
-            <div className="flex flex-col overflow-hidden text-ellipsis py-2 px-2">
+            <div className="relative group">
+              <Image
+                className="rounded-lg shadow-lg ring-2 ring-zinc-700/50 transition-all duration-300 group-hover:ring-green-500/50 group-hover:scale-105"
+                src={app.nowPlaying.item.album.images[0].url}
+                alt="Spotify"
+                width={64}
+                height={64}
+              />
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            </div>
+            <div className="flex flex-col overflow-hidden text-ellipsis py-2 px-2 min-w-0">
               <h4
-                className={`font-bold text-large overflow-hidden whitespace-nowrap text-ellipsis px-1`}
+                className={`font-bold text-lg overflow-hidden whitespace-nowrap text-ellipsis px-1 text-white transition-colors duration-200`}
               >
                 {app.nowPlaying.item.name}
               </h4>
-              <p className="text-sm text-zinc-400 overflow-hidden whitespace-nowrap text-ellipsis px-1">
+              <p className="text-sm text-zinc-400 overflow-hidden whitespace-nowrap text-ellipsis px-1 mt-0.5">
                 {app.nowPlaying.item.artists
                   .map((artist) => artist.name)
                   .join(", ")}
@@ -111,7 +114,9 @@ export default function Controls() {
           </>
         ) : (
           <div className="flex flex-row items-center">
-            <h4 className="text-large">No song playing</h4>
+            <h4 className="text-lg text-zinc-500 font-medium">
+              No song playing
+            </h4>
           </div>
         )}
       </div>
@@ -137,26 +142,53 @@ export default function Controls() {
           sm:flex
           sm:gap-3 
           sm:w-1/2
+          gap-2
         "
       >
         <div className="hidden flex-row items-center justify-center gap-3">
-          <Button size="sm">Previous</Button>
-          <Button size="sm">Play</Button>
-          <Button size="sm">Next</Button>
-        </div>
-        <div className="flex w-full flex-row items-center justify-center gap-3">
-          <p className="text-sm text-zinc-400">{formattedProgress}</p>
-          <Progress
-            aria-labelledby="progress-label"
+          <Button
             size="sm"
-            value={progress}
-            maxValue={duration}
-          />
-          <p className="text-sm text-zinc-400">{formattedDuration}</p>
+            className="bg-zinc-800 hover:bg-zinc-700 text-white"
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            className="bg-green-500 hover:bg-green-600 text-white"
+          >
+            Play
+          </Button>
+          <Button
+            size="sm"
+            className="bg-zinc-800 hover:bg-zinc-700 text-white"
+          >
+            Next
+          </Button>
+        </div>
+        <div className="flex w-full flex-row items-center justify-center gap-4 px-4">
+          <p className="text-xs text-zinc-400 font-mono min-w-[40px] text-right">
+            {formattedProgress}
+          </p>
+          <div className="flex-1 max-w-md">
+            <Progress
+              aria-labelledby="progress-label"
+              size="sm"
+              value={progress}
+              maxValue={duration}
+              className="w-full"
+              classNames={{
+                track: "bg-zinc-800",
+                indicator: "bg-gradient-to-r from-green-500 to-green-400",
+              }}
+            />
+          </div>
+          <p className="text-xs text-zinc-400 font-mono min-w-[40px] text-left">
+            {formattedDuration}
+          </p>
         </div>
       </div>
       <div className="hidden flex-row items-center xl:flex justify-end w-1/3">
-        <ListDevice />
+        {/* ListDevice component hidden */}
       </div>
     </div>
   );

@@ -177,3 +177,7 @@ export type SpotifyUser = {
   type: string;
   uri: string;
 };
+
+export type ArtistTopTracksResponse = {
+  tracks: Track[];
+};

@@ -23,17 +23,20 @@ export default function Layout() {
   }, [setIsSidebarVisible]);
 
   return (
-    <HeroUIProvider className="h-dvh select-none">
-      <div className="flex flex-col justify-center bg-zinc-950 rounded-lg h-full p-3 gap-y-3">
-        <Search />
+    <HeroUIProvider className="h-dvh select-none overflow-hidden">
+      <div className="flex flex-col bg-gradient-to-br from-zinc-950 via-zinc-950 to-black rounded-xl h-full p-4 gap-y-4 shadow-2xl overflow-hidden">
+        <div className="flex-shrink-0">
+          <Search />
+        </div>
         <div
-          className={`flex flex-row gap-3 ${
+          className={`flex flex-row gap-4 rounded-lg flex-1 min-h-0 overflow-hidden ${
             app.isSidebarVisible ? "" : ""
-          } rounded-lg h-full`}
+          }`}
         >
           <div
             className={`flex-grow md:block md:w-1/2 ${
-              (app.search?.tracks?.items.length ?? 0 > 0)
+              (app.search?.tracks?.items.length ?? 0 > 0) ||
+              (app.artistTopTracks?.tracks?.length ?? 0 > 0)
                 ? "flex w-full"
                 : "hidden"
             }`}
@@ -51,7 +54,9 @@ export default function Layout() {
             <Queue />
           </div>
         </div>
-        <Controls />
+        <div className="flex-shrink-0">
+          <Controls />
+        </div>
       </div>
     </HeroUIProvider>
   );

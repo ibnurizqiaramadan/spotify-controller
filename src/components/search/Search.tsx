@@ -13,6 +13,8 @@ export default function Search() {
     async (query: string) => {
       const [response, error] = await SearchSpotify({
         query,
+        limit: 20,
+        offset: 0,
       });
       if (error) console.log("error", error);
       if (query.length > 1) {
@@ -37,9 +39,14 @@ export default function Search() {
     <div className="flex flex-grow items-center justify-center">
       <Input
         type="text"
-        className="rounded-lg w-full md:w-1/2 lg:w-1/3 p-0 m-0"
-        placeholder="Search"
+        className="rounded-xl w-full md:w-1/2 lg:w-1/3 p-0 m-0"
+        placeholder="Search songs, artists, albums..."
         defaultValue={app.searchInput}
+        classNames={{
+          input: "text-white placeholder:text-zinc-500",
+          inputWrapper:
+            "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 focus-within:border-green-500/50 shadow-lg backdrop-blur-sm transition-all duration-200",
+        }}
         onKeyUp={(e) => {
           const value = e.currentTarget.value.trim().replace(/\s+/g, " ");
           setSearchInput(value);
