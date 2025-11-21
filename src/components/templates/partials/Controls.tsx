@@ -18,11 +18,17 @@ export default function Controls() {
   const { app, setNowPlaying, setRefreshQueue } = appStore((state) => state);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
 
   const formattedProgress = useMemo(() => formatTime(progress), [progress]);
   const formattedDuration = useMemo(() => formatTime(duration), [duration]);
 
   const fetchNowPlaying = useCallback(async () => {
+    // Prevent fetching more often than every 5 seconds
+    const now = Date.now();
+    if (now - lastFetchTime < 5000) return;
+
+    setLastFetchTime(now);
     const [response, error] = await getNowPlaying();
     if (error) console.error(error);
     if (response) {
@@ -30,13 +36,13 @@ export default function Controls() {
       setProgress(response.progress_ms);
       setDuration(response.item.duration_ms);
     }
-  }, [setNowPlaying]);
+  }, [setNowPlaying, lastFetchTime]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (app.queue?.currently_playing == null) return;
       fetchNowPlaying();
-    }, 10000);
+    }, 10000); // Polling every 10 seconds is fine
     return () => clearInterval(interval);
   }, [app.queue?.currently_playing, fetchNowPlaying]);
 
@@ -44,7 +50,8 @@ export default function Controls() {
     const interval = setInterval(() => {
       if (app.queue?.currently_playing == null) return;
       setProgress((prev) => prev + 1000);
-      if (progress >= duration) {
+      // Only trigger refresh when truly at the end of song
+      if (progress >= duration && duration > 0) {
         setProgress(0);
         fetchNowPlaying();
         setRefreshQueue(true);
