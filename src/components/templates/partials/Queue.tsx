@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { getQueue } from "@/data/layer/player";
 import QueueItem from "@/components/queue/QueueItem";
 import { appStore } from "@/stores/AppStores";
@@ -23,6 +23,7 @@ export default function Queue() {
   const prevQueueRef = useRef<QueueResponse | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState(0);
   const [fetchAttempts, setFetchAttempts] = useState(0);
+  const [spotifyQueue, setSpotifyQueue] = useState<QueueResponse | null>(null);
 
   const fetchQueue = useCallback(async () => {
     // Prevent refetching too frequently
@@ -85,6 +86,9 @@ export default function Queue() {
       console.error("Error syncing now playing to Convex:", error);
     }
 
+    // Store Spotify queue separately
+    setSpotifyQueue(response);
+    
     // Check if the queue has changed
     if (JSON.stringify(response) !== JSON.stringify(prevQueueRef.current)) {
       if (response?.queue.length && response?.queue.length > 0) {
@@ -137,6 +141,17 @@ export default function Queue() {
     }
   }, [convexNowPlaying?.spotifyId, convexQueue, removeFromQueue]);
 
+  // Filter system queue to exclude tracks that are in user queue
+  const filteredSystemQueue = useMemo(() => {
+    if (!spotifyQueue?.queue) return [];
+    
+    return spotifyQueue.queue.filter(
+      (spotifyTrack) => !convexQueue?.some(
+        (convexTrack) => convexTrack.spotifyId === spotifyTrack.id
+      )
+    );
+  }, [spotifyQueue?.queue, convexQueue]);
+
   return (
     <div
       className={`flex flex-col bg-gradient-to-b from-zinc-900/95 to-zinc-900/90 rounded-xl h-full p-3 shadow-xl border border-zinc-800/50 backdrop-blur-sm overflow-hidden ${
@@ -147,46 +162,79 @@ export default function Queue() {
       }`}
     >
       <div className="overflow-y-auto flex-1 min-h-0 max-w-full">
-        {(convexQueue && convexQueue.length > 0) || convexNowPlaying ? (
-          <>
-            <div className="mb-4">
-              <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
-                <span className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-400 rounded-full"></span>
-                Now Playing
-              </h4>
-              {convexNowPlaying && (
-                <div className="bg-zinc-800/50 rounded-lg p-1 border border-green-500/20">
-                  <QueueItem
-                    key={convexNowPlaying.spotifyId}
-                    item={convexNowPlayingToSpotifyTrack(convexNowPlaying)}
-                    currentPlaying={true}
-                                      />
-                </div>
-              )}
+        {/* Now Playing Section */}
+        <div className="mb-4">
+          <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
+            <span className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-400 rounded-full"></span>
+            Now Playing
+          </h4>
+          {convexNowPlaying ? (
+            <div className="bg-zinc-800/50 rounded-lg p-1 border border-green-500/20">
+              <QueueItem
+                key={convexNowPlaying.spotifyId}
+                item={convexNowPlayingToSpotifyTrack(convexNowPlaying)}
+                currentPlaying={true}
+              />
             </div>
-            <div>
-              <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
-                <span className="w-1 h-6 bg-gradient-to-b from-zinc-500 to-zinc-400 rounded-full"></span>
-                Next Queue
-              </h4>
-              {convexQueue?.map((item, index) => (
-                <QueueItem 
-                  key={item._id} 
-                  item={convexTrackToSpotifyTrack(item)} 
-                  addedBy={item.addedBy}
-                />
-              ))}
+          ) : (
+            <div className="text-center text-zinc-500 py-8">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 mx-auto mb-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+              </svg>
+              <p className="text-sm">Nothing is playing</p>
             </div>
-          </>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-zinc-500">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-            </svg>
-            <p className="text-sm">No tracks in queue</p>
-            <p className="text-xs text-zinc-600">Add some tracks to get started</p>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Next User Queue Section */}
+        <div className="mb-4">
+          <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
+            <span className="w-1 h-6 bg-gradient-to-b from-blue-500 to-blue-400 rounded-full"></span>
+            Next User Queue
+            {convexQueue && convexQueue.length > 0 && (
+              <span className="text-xs text-zinc-400 ml-auto">
+                {convexQueue.length} track{convexQueue.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </h4>
+          {convexQueue && convexQueue.length > 0 ? (
+            convexQueue.map((item, index) => (
+              <QueueItem 
+                key={item._id} 
+                item={convexTrackToSpotifyTrack(item)} 
+                addedBy={item.addedBy}
+              />
+            ))
+          ) : (
+            <div className="text-center text-zinc-500 py-4">
+              <p className="text-sm">No user requests</p>
+              <p className="text-xs text-zinc-600">Add tracks to queue</p>
+            </div>
+          )}
+        </div>
+
+        {/* Next System Queue Section */}
+        <div>
+          <h4 className="text-xl font-bold p-2 text-white mb-2 flex items-center gap-2">
+            <span className="w-1 h-6 bg-gradient-to-b from-zinc-500 to-zinc-400 rounded-full"></span>
+            Next System Queue
+            <span className="text-xs text-zinc-400 ml-auto">
+              {filteredSystemQueue.length} track{filteredSystemQueue.length > 1 ? "s" : ""}
+            </span>
+          </h4>
+          {filteredSystemQueue.length > 0 ? (
+            filteredSystemQueue.map((item, index) => (
+              <QueueItem 
+                key={`spotify-${item.id}`} 
+                item={item} 
+              />
+            ))
+          ) : (
+            <div className="text-center text-zinc-500 py-4">
+              <p className="text-sm">No tracks in system queue</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
