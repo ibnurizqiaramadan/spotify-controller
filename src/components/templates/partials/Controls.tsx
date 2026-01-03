@@ -148,18 +148,21 @@ export default function Controls() {
         <div className="hidden flex-row items-center justify-center gap-3">
           <Button
             size="sm"
+            color="default"
             className="bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Previous
           </Button>
           <Button
             size="sm"
+            color="success"
             className="bg-green-500 hover:bg-green-600 text-white"
           >
             Play
           </Button>
           <Button
             size="sm"
+            color="default"
             className="bg-zinc-800 hover:bg-zinc-700 text-white"
           >
             Next
@@ -173,6 +176,7 @@ export default function Controls() {
             <Progress
               aria-labelledby="progress-label"
               size="sm"
+              color="success"
               value={progress}
               maxValue={duration}
               className="w-full"

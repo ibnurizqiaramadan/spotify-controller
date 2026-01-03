@@ -39,6 +39,8 @@ const trackValidator = v.object({
   artists: v.array(artistValidator),
   album: albumValidator,
   addedAt: v.number(),
+  addedBy: v.id("users"),
+  position: v.number(),
 });
 
 // Create playlist
@@ -62,7 +64,6 @@ export const createPlaylist = mutation({
       image: args.image,
       isPublic: args.isPublic,
       ownerId: args.ownerId,
-      tracks: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -78,6 +79,28 @@ export const getPlaylistById = query({
   },
   handler: async (ctx, args) => {
     return ctx.db.get(args.playlistId);
+  },
+});
+
+// Get playlist with items
+export const getPlaylistWithItems = query({
+  args: {
+    playlistId: v.id("playlists"),
+  },
+  handler: async (ctx, args) => {
+    const playlist = await ctx.db.get(args.playlistId);
+    if (!playlist) return null;
+
+    const items = await ctx.db
+      .query("playlistItems")
+      .withIndex("by_playlistId", (q) => q.eq("playlistId", args.playlistId))
+      .order("asc")
+      .collect();
+
+    return {
+      ...playlist,
+      items,
+    };
   },
 });
 
@@ -156,7 +179,13 @@ export const deletePlaylist = mutation({
 export const addTrackToPlaylist = mutation({
   args: {
     playlistId: v.id("playlists"),
-    track: trackValidator,
+    spotifyId: v.string(),
+    name: v.string(),
+    uri: v.string(),
+    durationMs: v.number(),
+    artists: v.array(artistValidator),
+    album: albumValidator,
+    addedBy: v.id("users"),
   },
   handler: async (ctx, args) => {
     const playlist = await ctx.db.get(args.playlistId);
@@ -164,19 +193,31 @@ export const addTrackToPlaylist = mutation({
       throw new Error("Playlist not found");
     }
 
-    // Check if track already exists in playlist
-    const trackExists = playlist.tracks.some(
-      (t) => t.spotifyId === args.track.spotifyId
-    );
+    // Get current max position
+    const existingItems = await ctx.db
+      .query("playlistItems")
+      .withIndex("by_playlistId", (q) => q.eq("playlistId", args.playlistId))
+      .collect();
+    
+    const newPosition = existingItems.length > 0 ? 
+      Math.max(...existingItems.map(item => item.position)) + 1 : 0;
 
-    if (trackExists) {
-      throw new Error("Track already in playlist");
-    }
+    // Insert new track
+    await ctx.db.insert("playlistItems", {
+      playlistId: args.playlistId,
+      spotifyId: args.spotifyId,
+      name: args.name,
+      uri: args.uri,
+      durationMs: args.durationMs,
+      artists: args.artists,
+      album: args.album,
+      addedAt: Date.now(),
+      addedBy: args.addedBy,
+      position: newPosition,
+    });
 
-    const updatedTracks = [...playlist.tracks, args.track];
-
+    // Update playlist timestamp
     await ctx.db.patch(args.playlistId, {
-      tracks: updatedTracks,
       updatedAt: Date.now(),
     });
 
@@ -196,12 +237,21 @@ export const removeTrackFromPlaylist = mutation({
       throw new Error("Playlist not found");
     }
 
-    const updatedTracks = playlist.tracks.filter(
-      (t) => t.spotifyId !== args.spotifyId
-    );
+    // Find and delete the track
+    const trackToDelete = await ctx.db
+      .query("playlistItems")
+      .withIndex("by_playlistId", (q) => 
+        q.eq("playlistId", args.playlistId)
+      )
+      .filter((q) => q.eq(q.field("spotifyId"), args.spotifyId))
+      .first();
 
+    if (trackToDelete) {
+      await ctx.db.delete(trackToDelete._id);
+    }
+
+    // Update playlist timestamp
     await ctx.db.patch(args.playlistId, {
-      tracks: updatedTracks,
       updatedAt: Date.now(),
     });
 
@@ -213,8 +263,8 @@ export const removeTrackFromPlaylist = mutation({
 export const reorderPlaylistTracks = mutation({
   args: {
     playlistId: v.id("playlists"),
-    fromIndex: v.number(),
-    toIndex: v.number(),
+    fromPosition: v.number(),
+    toPosition: v.number(),
   },
   handler: async (ctx, args) => {
     const playlist = await ctx.db.get(args.playlistId);
@@ -222,12 +272,40 @@ export const reorderPlaylistTracks = mutation({
       throw new Error("Playlist not found");
     }
 
-    const tracks = [...playlist.tracks];
-    const [movedTrack] = tracks.splice(args.fromIndex, 1);
-    tracks.splice(args.toIndex, 0, movedTrack);
+    // Get all items
+    const items = await ctx.db
+      .query("playlistItems")
+      .withIndex("by_playlistId_position", (q) => q.eq("playlistId", args.playlistId))
+      .collect();
 
+    // Find the item to move
+    const itemToMove = items.find(item => item.position === args.fromPosition);
+    if (!itemToMove) {
+      throw new Error("Track not found at position");
+    }
+
+    // Update positions
+    if (args.fromPosition < args.toPosition) {
+      // Moving down
+      items.forEach(item => {
+        if (item.position > args.fromPosition && item.position <= args.toPosition) {
+          ctx.db.patch(item._id, { position: item.position - 1 });
+        }
+      });
+    } else {
+      // Moving up
+      items.forEach(item => {
+        if (item.position >= args.toPosition && item.position < args.fromPosition) {
+          ctx.db.patch(item._id, { position: item.position + 1 });
+        }
+      });
+    }
+
+    // Update moved item position
+    await ctx.db.patch(itemToMove._id, { position: args.toPosition });
+
+    // Update playlist timestamp
     await ctx.db.patch(args.playlistId, {
-      tracks,
       updatedAt: Date.now(),
     });
 
@@ -239,7 +317,15 @@ export const reorderPlaylistTracks = mutation({
 export const bulkAddTracksToPlaylist = mutation({
   args: {
     playlistId: v.id("playlists"),
-    tracks: v.array(trackValidator),
+    tracks: v.array(v.object({
+      spotifyId: v.string(),
+      name: v.string(),
+      uri: v.string(),
+      durationMs: v.number(),
+      artists: v.array(artistValidator),
+      album: albumValidator,
+      addedBy: v.id("users"),
+    })),
   },
   handler: async (ctx, args) => {
     const playlist = await ctx.db.get(args.playlistId);
@@ -247,17 +333,46 @@ export const bulkAddTracksToPlaylist = mutation({
       throw new Error("Playlist not found");
     }
 
-    // Filter out duplicates
-    const existingIds = new Set(playlist.tracks.map((t) => t.spotifyId));
-    const newTracks = args.tracks.filter((t) => !existingIds.has(t.spotifyId));
+    // Get existing tracks
+    const existingItems = await ctx.db
+      .query("playlistItems")
+      .withIndex("by_playlistId", (q) => q.eq("playlistId", args.playlistId))
+      .collect();
+    
+    const existingIds = new Set(existingItems.map((t) => t.spotifyId));
+    
+    // Get next position
+    const nextPosition = existingItems.length > 0 ? 
+      Math.max(...existingItems.map(item => item.position)) + 1 : 0;
 
-    const updatedTracks = [...playlist.tracks, ...newTracks];
+    // Filter out duplicates and insert new tracks
+    let addedCount = 0;
+    for (let i = 0; i < args.tracks.length; i++) {
+      const track = args.tracks[i];
+      if (!existingIds.has(track.spotifyId)) {
+        await ctx.db.insert("playlistItems", {
+          playlistId: args.playlistId,
+          spotifyId: track.spotifyId,
+          name: track.name,
+          uri: track.uri,
+          durationMs: track.durationMs,
+          artists: track.artists,
+          album: track.album,
+          addedAt: Date.now(),
+          addedBy: track.addedBy,
+          position: nextPosition + i,
+        });
+        addedCount++;
+      }
+    }
 
-    await ctx.db.patch(args.playlistId, {
-      tracks: updatedTracks,
-      updatedAt: Date.now(),
-    });
+    // Update playlist timestamp
+    if (addedCount > 0) {
+      await ctx.db.patch(args.playlistId, {
+        updatedAt: Date.now(),
+      });
+    }
 
-    return { addedCount: newTracks.length };
+    return { addedCount };
   },
 });

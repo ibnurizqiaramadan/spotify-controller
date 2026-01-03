@@ -178,18 +178,25 @@ export default defineSchema({
     image: v.optional(v.string()),
     isPublic: v.boolean(),
     ownerId: v.id("users"),
-    tracks: v.array(v.object({
-      spotifyId: v.string(),
-      name: v.string(),
-      uri: v.string(),
-      durationMs: v.number(),
-      artists: v.array(artistValidator),
-      album: albumValidator,
-      addedAt: v.number(),
-    })),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_ownerId", ["ownerId"])
     .index("by_isPublic", ["isPublic"]),
+    
+  // Playlist items (tracks in playlists)
+  playlistItems: defineTable({
+    playlistId: v.id("playlists"),
+    spotifyId: v.string(),
+    name: v.string(),
+    uri: v.string(),
+    durationMs: v.number(),
+    artists: v.array(artistValidator),
+    album: albumValidator,
+    addedAt: v.number(),
+    addedBy: v.id("users"),
+    position: v.number(), // For ordering tracks in playlist
+  })
+    .index("by_playlistId", ["playlistId"])
+    .index("by_playlistId_position", ["playlistId", "position"]),
 });

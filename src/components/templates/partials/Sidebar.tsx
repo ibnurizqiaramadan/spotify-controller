@@ -6,11 +6,12 @@ import { memo, useEffect, useCallback, useState, useRef } from "react";
 import { getPlaylists, getArtistTopTracks } from "@/data/layer/player";
 import { SearchSpotify } from "@/data/layer/search";
 import PlaylistItems from "@/components/sidebars/Playlistitems";
-import { Button, Tabs, Tab } from "@heroui/react";
-import { useQuery } from "convex/react";
+import { Button, Tabs, Tab, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Input, Textarea, Switch, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { signIn } from "next-auth/react";
 import { useCurrentConvexUser } from "@/hooks/use-current-convex-user";
+import { Doc } from "../../../../convex/_generated/dataModel";
 
 const Sidebar = () => {
   const { app, setPlaylists, setArtistTopTracks, setSearch } = appStore(
@@ -21,6 +22,12 @@ const Sidebar = () => {
   const [activeTab, setActiveTab] = useState<string>("top-tracks");
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const lastSelectedArtistIdRef = useRef<string | null>(null);
+  
+  // Playlist CRUD state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPlaylist, setEditingPlaylist] = useState<Doc<"playlists"> | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({ name: "", description: "", image: "", isPublic: false });
 
   // Get authenticated user and playlists
   const { user, isAuthenticated, isLoading } = useCurrentConvexUser();
@@ -28,6 +35,65 @@ const Sidebar = () => {
     api.playlists.getUserPlaylists,
     user ? { ownerId: user._id } : "skip"
   );
+  
+  // Playlist mutations
+  const createPlaylist = useMutation(api.playlists.createPlaylist);
+  const updatePlaylist = useMutation(api.playlists.updatePlaylist);
+  const deletePlaylist = useMutation(api.playlists.deletePlaylist);
+
+  const openCreateModal = () => {
+    setEditingPlaylist(null);
+    setFormData({ name: "", description: "", image: "", isPublic: false });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (playlist: Doc<"playlists">) => {
+    setEditingPlaylist(playlist);
+    setFormData({
+      name: playlist.name,
+      description: playlist.description || "",
+      image: playlist.image || "",
+      isPublic: playlist.isPublic,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmitPlaylist = async () => {
+    if (!formData.name.trim() || !user) return;
+    setIsSubmitting(true);
+    try {
+      if (editingPlaylist) {
+        await updatePlaylist({
+          playlistId: editingPlaylist._id,
+          name: formData.name,
+          description: formData.description || undefined,
+          image: formData.image || undefined,
+          isPublic: formData.isPublic,
+        });
+      } else {
+        await createPlaylist({
+          name: formData.name,
+          description: formData.description || undefined,
+          image: formData.image || undefined,
+          isPublic: formData.isPublic,
+          ownerId: user._id,
+        });
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Failed to save playlist:", error);
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleDeletePlaylist = async (playlist: Doc<"playlists">) => {
+    if (!confirm(`Delete "${playlist.name}"?`)) return;
+    try {
+      await deletePlaylist({ playlistId: playlist._id });
+    } catch (error) {
+      console.error("Failed to delete playlist:", error);
+    }
+  };
 
   useEffect(() => {
     getPlaylists().then(([response, error]) => {
@@ -220,6 +286,7 @@ const Sidebar = () => {
     app?.artistTopTracks?.tracks?.[0]?.artists?.[0]?.name || null;
 
   return (
+    <>
     <div
       className={`bg-gradient-to-b from-zinc-900/95 to-zinc-900/90 rounded-xl h-full w-full p-3 shadow-xl border border-zinc-800/50 backdrop-blur-sm flex flex-col overflow-hidden overflow-x-hidden`}
     >
@@ -259,6 +326,7 @@ const Sidebar = () => {
                   selectedKey={activeTab}
                   onSelectionChange={(key) => setActiveTab(key as string)}
                   variant="underlined"
+                  color="success"
                   classNames={{
                     tabList: "gap-4 w-full relative rounded-none p-0 border-b border-zinc-700/50",
                     cursor: "w-full bg-green-500",
@@ -303,6 +371,7 @@ const Sidebar = () => {
                           isIconOnly
                           size="sm"
                           variant="light"
+                          color="default"
                           onPress={handleRefresh}
                           isLoading={isRefreshing}
                           className="text-zinc-400 hover:text-white transition-colors"
@@ -349,7 +418,7 @@ const Sidebar = () => {
                       </svg>
                       <p className="text-sm mb-3">Sign in to view your playlists</p>
                       <Button
-                        color="primary"
+                        color="success"
                         variant="flat"
                         size="sm"
                         onPress={() => signIn("google", { callbackUrl: "/" })}
@@ -368,35 +437,69 @@ const Sidebar = () => {
                     <div className="flex items-center justify-center py-8">
                       <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
-                  ) : convexPlaylists && convexPlaylists.length > 0 ? (
-                    convexPlaylists.map((playlist) => (
-                      <div
-                        key={playlist._id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 transition-colors cursor-pointer group"
-                      >
-                        <div className="w-12 h-12 rounded-md bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center flex-shrink-0">
-                          {playlist.image ? (
-                            <img src={playlist.image} alt={playlist.name} className="w-full h-full object-cover rounded-md" />
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white truncate">{playlist.name}</p>
-                          <p className="text-xs text-zinc-400">{playlist.tracks.length} tracks</p>
-                        </div>
-                      </div>
-                    ))
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-zinc-500">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
-                      </svg>
-                      <p className="text-sm">No playlists yet</p>
-                      <p className="text-xs text-zinc-600">Create a playlist to get started</p>
-                    </div>
+                    <>
+                      {/* Create Playlist Button */}
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="default"
+                        onPress={openCreateModal}
+                        className="bg-zinc-800 hover:bg-zinc-700 text-white justify-start mb-2"
+                        startContent={
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        }
+                      >
+                        Create Playlist
+                      </Button>
+
+                      {convexPlaylists && convexPlaylists.length > 0 ? (
+                        convexPlaylists.map((playlist) => (
+                          <div
+                            key={playlist._id}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                          >
+                            <div className="w-12 h-12 rounded-md bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center flex-shrink-0">
+                              {playlist.image ? (
+                                <img src={playlist.image} alt={playlist.name} className="w-full h-full object-cover rounded-md" />
+                              ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-white">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-white truncate">{playlist.name}</p>
+                              <p className="text-xs text-zinc-400">{playlist.isPublic ? "Public" : "Private"}</p>
+                            </div>
+                            {/* Edit/Delete Dropdown */}
+                            <Dropdown placement="bottom-end">
+                              <DropdownTrigger>
+                                <Button isIconOnly size="sm" variant="light" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                  </svg>
+                                </Button>
+                              </DropdownTrigger>
+                              <DropdownMenu aria-label="Playlist actions">
+                                <DropdownItem key="edit" onPress={() => openEditModal(playlist)}>Edit</DropdownItem>
+                                <DropdownItem key="delete" className="text-danger" color="danger" onPress={() => handleDeletePlaylist(playlist)}>Delete</DropdownItem>
+                              </DropdownMenu>
+                            </Dropdown>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-zinc-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mb-2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+                          </svg>
+                          <p className="text-sm">No playlists yet</p>
+                          <p className="text-xs text-zinc-600">Create your first playlist</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -405,6 +508,98 @@ const Sidebar = () => {
         </div>
       </div>
     </div>
+
+      {/* Playlist Create/Edit Modal */}
+      <Modal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        size="md"
+        backdrop="blur"
+        classNames={{
+          base: "bg-zinc-900 text-white border border-zinc-800",
+          header: "bg-zinc-900 border-b border-zinc-800",
+          body: "py-6",
+          footer: "bg-zinc-900 border-t border-zinc-800",
+        }}
+      >
+        <ModalContent>
+          <ModalHeader className="text-xl font-semibold text-white">
+            {editingPlaylist ? "Edit Playlist" : "Create Playlist"}
+          </ModalHeader>
+          <ModalBody>
+            <div className="space-y-5">
+              <Input
+                label="Name"
+                placeholder="Enter playlist name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                isRequired
+                classNames={{
+                  label: "text-zinc-300 text-sm font-medium",
+                  input: "bg-zinc-800 text-white placeholder:text-zinc-500 border-zinc-700 focus:border-green-500",
+                  inputWrapper: "bg-zinc-800 border-zinc-700 hover:border-zinc-600",
+                }}
+              />
+              <Textarea
+                label="Description"
+                placeholder="Add an optional description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                minRows={3}
+                classNames={{
+                  label: "text-zinc-300 text-sm font-medium",
+                  input: "bg-zinc-800 text-white placeholder:text-zinc-500 border-zinc-700 focus:border-green-500",
+                  inputWrapper: "bg-zinc-800 border-zinc-700 hover:border-zinc-600",
+                }}
+              />
+              <Input
+                label="Image URL"
+                placeholder="https://example.com/image.jpg"
+                value={formData.image}
+                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                classNames={{
+                  label: "text-zinc-300 text-sm font-medium",
+                  input: "bg-zinc-800 text-white placeholder:text-zinc-500 border-zinc-700 focus:border-green-500",
+                  inputWrapper: "bg-zinc-800 border-zinc-700 hover:border-zinc-600",
+                }}
+              />
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="text-sm font-medium text-zinc-300">Visibility</p>
+                  <p className="text-xs text-zinc-500">Make this playlist public</p>
+                </div>
+                <Switch
+                  isSelected={formData.isPublic}
+                  onValueChange={(isPublic) => setFormData({ ...formData, isPublic })}
+                  classNames={{
+                    wrapper: "group-data-[selected=true]:bg-green-600 group-data-[selected=true]:border-green-600",
+                  }}
+                />
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button 
+              variant="light" 
+              color="default"
+              onPress={() => setIsModalOpen(false)}
+              className="text-zinc-400 hover:text-white hover:bg-zinc-800"
+            >
+              Cancel
+            </Button>
+            <Button 
+              color="success" 
+              onPress={handleSubmitPlaylist} 
+              isLoading={isSubmitting} 
+              isDisabled={!formData.name.trim()}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {editingPlaylist ? "Save Changes" : "Create Playlist"}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </>
   );
 };
 

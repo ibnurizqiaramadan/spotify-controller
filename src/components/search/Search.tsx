@@ -40,6 +40,7 @@ export default function Search() {
     <div className="flex flex-grow items-center justify-center gap-4">
       <Input
         type="text"
+        color="default"
         className="rounded-xl w-full md:w-1/2 lg:w-1/3 p-0 m-0"
         placeholder="Search songs, artists, albums..."
         defaultValue={app.searchInput}
