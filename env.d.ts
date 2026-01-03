@@ -11,5 +11,10 @@ declare namespace NodeJS {
     NEXT_PUBLIC_CONVEX_URL: string;
     CONVEX_SELF_HOSTED_URL: string;
     CONVEX_SELF_HOSTED_ADMIN_KEY: string;
+    GOOGLE_CLIENT_ID: string;
+    GOOGLE_CLIENT_SECRET: string;
+    CONVEX_SITE_URL: string;
+    NEXTAUTH_URL: string;
+    NEXTAUTH_SECRET: string;
   }
 }

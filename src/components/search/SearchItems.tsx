@@ -3,10 +3,18 @@
 import { Image } from "@heroui/react";
 import { Track } from "@/data/responseTypes";
 import { addToQueue } from "@/data/layer/player";
+import { useAddToQueue } from "@/data/layer/queue-client";
 import { appStore } from "@/stores/AppStores";
 import { useState } from "react";
+import { useCurrentConvexUser } from "@/hooks/use-current-convex-user";
+import { signIn } from "next-auth/react";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 const SearchItems = ({ item }: { item: Track }) => {
   const { setRefreshQueue } = appStore();
+  const { user, isAuthenticated } = useCurrentConvexUser();
+  const { addToQueue: addToConvexQueue } = useAddToQueue();
+  const queueSettings = useQuery(api.queue.getQueueSettings);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
@@ -18,12 +26,39 @@ const SearchItems = ({ item }: { item: Track }) => {
       } ${isAdded ? "hidden" : ""}`}
       onClick={() => {
         if (isLoading) return;
+        
+        // Check if user is authenticated
+        if (!isAuthenticated || !user) {
+          // Redirect to Google sign in
+          signIn("google", { callbackUrl: "/" });
+          return;
+        }
+        
+        // Check if requests are accepted
+        if (user.role === "user" && queueSettings?.isPaused) {
+          alert("Requests are currently disabled");
+          return;
+        }
+        
         setIsLoading(true);
+        
+        // Add to Spotify queue
         addToQueue({
           uri: item.uri,
         }).then(([response, error]) => {
           if (error) console.log(error);
           console.log(response);
+          
+          // Also add to Convex queue
+          addToConvexQueue({
+            track: item,
+            userEmail: user.email,
+          }).then((result) => {
+            if (!result.success) {
+              console.error("Failed to add to Convex queue:", result.error);
+            }
+          });
+          
           setRefreshQueue(true);
           setIsAdded(true);
           setIsLoading(false);

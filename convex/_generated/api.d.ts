@@ -8,7 +8,9 @@
  * @module
  */
 
-import type * as example from "../example.js";
+import type * as playlists from "../playlists.js";
+import type * as queue from "../queue.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +19,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  example: typeof example;
+  playlists: typeof playlists;
+  queue: typeof queue;
+  users: typeof users;
 }>;
 
 /**

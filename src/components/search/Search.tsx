@@ -4,6 +4,7 @@ import { SearchSpotify } from "@/data/layer/search";
 import { Input } from "@heroui/react";
 import { useCallback, useRef } from "react";
 import { appStore } from "@/stores/AppStores";
+import UserAvatar from "@/components/user/UserAvatar";
 
 export default function Search() {
   const { setSearch, setSearchInput, app } = appStore((state) => state);
@@ -36,7 +37,7 @@ export default function Search() {
   };
 
   return (
-    <div className="flex flex-grow items-center justify-center">
+    <div className="flex flex-grow items-center justify-center gap-4">
       <Input
         type="text"
         className="rounded-xl w-full md:w-1/2 lg:w-1/3 p-0 m-0"
@@ -53,6 +54,7 @@ export default function Search() {
           debounceFetchSearch(value);
         }}
       />
+      <UserAvatar />
     </div>
   );
 }
