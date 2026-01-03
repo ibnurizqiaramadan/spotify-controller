@@ -8,5 +8,8 @@ declare namespace NodeJS {
     REDIS_HOST: string;
     REDIS_PORT: string;
     REDIS_DB: string;
+    NEXT_PUBLIC_CONVEX_URL: string;
+    CONVEX_SELF_HOSTED_URL: string;
+    CONVEX_SELF_HOSTED_ADMIN_KEY: string;
   }
 }

@@ -182,7 +182,7 @@ async function request<URL extends API_PATH>(
     revalidateKey = "",
     revalidateTime = 60,
   } = options;
-  if (revalidateKey !== "") revalidateTag(revalidateKey);
+  if (revalidateKey !== "") revalidateTag(revalidateKey, {});
   if (useCache && method === "get") {
     const key =
       cacheKey === ""
