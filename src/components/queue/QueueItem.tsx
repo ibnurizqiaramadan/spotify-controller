@@ -2,13 +2,18 @@
 
 import { Image } from "@heroui/react";
 import { Track } from "@/data/responseTypes";
+import { useSession } from "next-auth/react";
 const QueueItem = ({
   item,
   currentPlaying = false,
+  addedBy,
 }: {
   item: Track;
   currentPlaying?: boolean;
+  addedBy?: string;
 }) => {
+  const { data: session } = useSession();
+  const isCurrentUser = session?.user?.email === addedBy;
   return (
     <div className="rounded-xl flex flex-row h-[85px] items-center hover:bg-zinc-800/60 active:bg-zinc-800 transition-all duration-200 border border-transparent hover:border-zinc-700/30 group">
       <div className="relative">
@@ -36,6 +41,11 @@ const QueueItem = ({
         <p className="text-sm text-zinc-400 overflow-hidden whitespace-nowrap text-ellipsis px-1 mt-0.5">
           {item.artists.map((artist) => artist.name).join(", ")}
         </p>
+        {addedBy && (
+          <p className="text-xs text-zinc-500 overflow-hidden whitespace-nowrap text-ellipsis px-1 mt-0.5">
+            Added by {isCurrentUser ? "You" : addedBy}
+          </p>
+        )}
       </div>
     </div>
   );

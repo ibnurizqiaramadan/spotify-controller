@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { getQueue } from "@/data/layer/player";
 import QueueItem from "@/components/queue/QueueItem";
 import { appStore } from "@/stores/AppStores";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { convexNowPlayingToSpotifyTrack, convexTrackToSpotifyTrack } from "@/utils/convex-to-spotify";
 import { QueueResponse } from "@/data/responseTypes";
@@ -18,7 +18,7 @@ export default function Queue() {
   
   // Mutations
   const syncNowPlaying = useMutation(api.queue.syncNowPlaying);
-  const bulkAddToQueue = useMutation(api.queue.bulkAddToQueue);
+  const removeFromQueue = useMutation(api.queue.removeFromQueue);
   
   const prevQueueRef = useRef<QueueResponse | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState(0);
@@ -41,9 +41,8 @@ export default function Queue() {
       return;
     }
 
-    // Save to Convex
+    // Sync now playing to Convex (but not the queue)
     try {
-      // Sync now playing
       if (response.currently_playing) {
         await syncNowPlaying({
           spotifyId: response.currently_playing.id,
@@ -82,49 +81,8 @@ export default function Queue() {
           repeatState: "",
         });
       }
-
-      // Sync queue
-      if (response.queue && response.queue.length > 0) {
-        await bulkAddToQueue({
-          tracks: response.queue.map(track => ({
-            spotifyId: track.id,
-            name: track.name,
-            uri: track.uri,
-            href: track.href,
-            externalUrl: track.external_urls.spotify,
-            durationMs: track.duration_ms,
-            explicit: track.explicit,
-            popularity: track.popularity,
-            previewUrl: track.preview_url ?? undefined,
-            trackNumber: track.track_number,
-            discNumber: track.disc_number,
-            isLocal: track.is_local,
-            isPlayable: track.is_playable,
-            artists: track.artists.map(artist => ({
-              id: artist.id,
-              name: artist.name,
-              uri: artist.uri,
-              href: artist.href,
-              externalUrl: artist.external_urls.spotify,
-            })),
-            album: {
-              id: track.album.id,
-              name: track.album.name,
-              albumType: track.album.album_type,
-              uri: track.album.uri,
-              href: track.album.href,
-              externalUrl: track.album.external_urls.spotify,
-              releaseDate: track.album.release_date,
-              totalTracks: track.album.total_tracks,
-              images: track.album.images,
-            },
-          })),
-          addedBy: "system",
-          clearExisting: true,
-        });
-      }
     } catch (error) {
-      console.error("Error syncing queue to Convex:", error);
+      console.error("Error syncing now playing to Convex:", error);
     }
 
     // Check if the queue has changed
@@ -143,7 +101,7 @@ export default function Queue() {
         setTimeout(() => fetchQueue(), 2000);
       }
     }
-  }, [setQueue, lastFetchTime, fetchAttempts, syncNowPlaying, bulkAddToQueue]);
+  }, [setQueue, lastFetchTime, fetchAttempts, syncNowPlaying]);
 
   useEffect(() => {
     fetchQueue();
@@ -161,6 +119,23 @@ export default function Queue() {
       setRefreshQueue(false);
     }
   }, [app, app.refreshQueue, fetchQueue, setRefreshQueue]);
+
+  // Remove track from queue when it starts playing
+  useEffect(() => {
+    if (convexNowPlaying && convexQueue && convexQueue.length > 0) {
+      const trackInQueue = convexQueue.find(
+        (track) => track.spotifyId === convexNowPlaying.spotifyId
+      );
+      
+      if (trackInQueue) {
+        // Remove the track from queue
+        removeFromQueue({ 
+          trackId: trackInQueue._id, 
+          removedBy: "system" 
+        }).catch(console.error);
+      }
+    }
+  }, [convexNowPlaying?.spotifyId, convexQueue, removeFromQueue]);
 
   return (
     <div
@@ -185,7 +160,7 @@ export default function Queue() {
                     key={convexNowPlaying.spotifyId}
                     item={convexNowPlayingToSpotifyTrack(convexNowPlaying)}
                     currentPlaying={true}
-                  />
+                                      />
                 </div>
               )}
             </div>
@@ -198,6 +173,7 @@ export default function Queue() {
                 <QueueItem 
                   key={item._id} 
                   item={convexTrackToSpotifyTrack(item)} 
+                  addedBy={item.addedBy}
                 />
               ))}
             </div>
