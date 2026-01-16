@@ -25,7 +25,8 @@ logAuth("All required environment variables are present", {
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "✓ Set" : "✗ Missing",
   NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ? "✓ Set" : "✗ Missing",
   NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ? "✓ Set" : "✗ Missing",
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL || "⚠ NOT SET - This may cause redirect issues!"
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || "⚠ NOT SET - This may cause redirect issues!",
+  AUTH_TRUST_HOST: process.env.AUTH_TRUST_HOST || "⚠ NOT SET - Set to 'true' if behind proxy/load balancer"
 });
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
@@ -53,6 +54,7 @@ const createHandler = () => {
     debug: true, // Enable NextAuth debug mode
     secret: process.env.NEXTAUTH_SECRET,
     // Explicitly set base URL if provided
+    // Note: Set AUTH_TRUST_HOST=true environment variable for proxy/load balancer deployments
     ...(process.env.NEXTAUTH_URL && {
       basePath: '/api/auth',
       baseUrl: process.env.NEXTAUTH_URL
@@ -212,6 +214,28 @@ const loggedHandler = async (request: Request, context?: any) => {
   const origin = request.headers.get('origin') || 'unknown';
   const referer = request.headers.get('referer') || 'unknown';
   
+  // Detect correct protocol
+  // Priority: x-forwarded-proto header > NEXTAUTH_URL > request protocol
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const nextAuthUrl = process.env.NEXTAUTH_URL;
+  let correctProtocol = requestUrl.protocol;
+  
+  if (forwardedProto) {
+    correctProtocol = forwardedProto.includes('https') ? 'https:' : 'http:';
+  } else if (nextAuthUrl) {
+    try {
+      const nextAuthUrlObj = new URL(nextAuthUrl);
+      correctProtocol = nextAuthUrlObj.protocol;
+    } catch {
+      // Keep request protocol if NEXTAUTH_URL is invalid
+    }
+  }
+  
+  const expectedCallbackUrl = `${correctProtocol}//${host}/api/auth/callback/google`;
+  
+  // Check for protocol mismatch
+  const protocolMismatch = requestUrl.protocol !== correctProtocol;
+  
   logAuth("Incoming auth request", {
     method: request.method,
     fullUrl: request.url,
@@ -220,10 +244,22 @@ const loggedHandler = async (request: Request, context?: any) => {
     host: host,
     origin: origin,
     referer: referer,
-    protocol: requestUrl.protocol,
-    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
-    expectedCallbackUrl: `${requestUrl.protocol}//${host}/api/auth/callback/google`
+    requestProtocol: requestUrl.protocol,
+    correctProtocol: correctProtocol,
+    protocolMismatch: protocolMismatch,
+    forwardedProto: forwardedProto || 'not-set',
+    nextAuthUrl: nextAuthUrl || 'NOT SET',
+    expectedCallbackUrl: expectedCallbackUrl,
+    warning: protocolMismatch ? '⚠️ Protocol mismatch detected! Callback URL may be incorrect.' : null
   });
+  
+  if (protocolMismatch) {
+    logAuthError("Protocol mismatch detected", {
+      requestProtocol: requestUrl.protocol,
+      correctProtocol: correctProtocol,
+      message: "Request uses different protocol than NEXTAUTH_URL. This may cause callback URL mismatch in Google OAuth."
+    });
+  }
 
   try {
     const result = await handler(request, context);
