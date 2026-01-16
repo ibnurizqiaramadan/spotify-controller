@@ -33,7 +33,12 @@ console.log("[AUTH] Convex client initialized successfully");
 const createHandler = () => {
   console.error("[AUTH] 🚀 NextAuth handler created at:", new Date().toISOString());
 
+  // Log Google provider configuration (without secrets)
+  console.error("[AUTH] Google Client ID starts with:", process.env.GOOGLE_CLIENT_ID?.substring(0, 10) + "...");
+  console.error("[AUTH] NextAuth secret is set:", !!process.env.NEXTAUTH_SECRET);
+
   return NextAuth({
+    debug: true, // Enable NextAuth debug mode
     secret: process.env.NEXTAUTH_SECRET,
     providers: [
       GoogleProvider({
@@ -57,6 +62,8 @@ const createHandler = () => {
       console.error("[AUTH] User email:", user?.email);
       console.error("[AUTH] User name:", user?.name);
       console.error("[AUTH] User image:", user?.image ? "Present" : "Not present");
+      console.error("[AUTH] Full account object:", JSON.stringify(account, null, 2));
+      console.error("[AUTH] Full user object:", JSON.stringify(user, null, 2));
 
       if (account?.provider === "google" && user.email) {
         console.error("[AUTH] Processing Google OAuth sign-in for user:", user.email);
@@ -167,4 +174,23 @@ const createHandler = () => {
 
 const handler = createHandler();
 
-export { handler as GET, handler as POST };
+// Wrapper to log incoming requests
+const loggedHandler = async (request: Request, context?: any) => {
+  console.error("[AUTH] 📨 Incoming auth request:", {
+    method: request.method,
+    url: request.url,
+    timestamp: new Date().toISOString(),
+    headers: Object.fromEntries(request.headers.entries())
+  });
+
+  try {
+    const result = await handler(request, context);
+    console.error("[AUTH] ✅ Auth request processed successfully");
+    return result;
+  } catch (error) {
+    console.error("[AUTH] ❌ Auth request failed:", error);
+    throw error;
+  }
+};
+
+export { loggedHandler as GET, loggedHandler as POST };
