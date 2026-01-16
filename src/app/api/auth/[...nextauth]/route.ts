@@ -4,8 +4,30 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
 
 // Environment variable validation and logging
-console.log("[AUTH] Initializing NextAuth configuration...");
-console.log("[AUTH] Checking environment variables...");
+const logAuth = (message: string, data?: any) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    service: 'auth',
+    message,
+    ...(data && { data })
+  };
+  console.log(JSON.stringify(logEntry));
+};
+
+const logAuthError = (message: string, error?: any) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    service: 'auth',
+    message,
+    ...(error && { error: error.message || error })
+  };
+  console.error(JSON.stringify(logEntry));
+};
+
+logAuth("Initializing NextAuth configuration");
+logAuth("Checking environment variables");
 
 const requiredEnvVars = [
   'NEXTAUTH_SECRET',
@@ -16,26 +38,29 @@ const requiredEnvVars = [
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
-  console.error("[AUTH] Missing required environment variables:", missingVars);
+  logAuthError("Missing required environment variables", missingVars);
   throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
 }
 
-console.log("[AUTH] All required environment variables are present");
-console.log("[AUTH] GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID ? "✓ Set" : "✗ Missing");
-console.log("[AUTH] GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "✓ Set" : "✗ Missing");
-console.log("[AUTH] NEXTAUTH_SECRET:", process.env.NEXTAUTH_SECRET ? "✓ Set" : "✗ Missing");
-console.log("[AUTH] NEXT_PUBLIC_CONVEX_URL:", process.env.NEXT_PUBLIC_CONVEX_URL ? "✓ Set" : "✗ Missing");
+logAuth("All required environment variables are present", {
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "✓ Set" : "✗ Missing",
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "✓ Set" : "✗ Missing",
+  NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ? "✓ Set" : "✗ Missing",
+  NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ? "✓ Set" : "✗ Missing"
+});
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
-console.log("[AUTH] Convex client initialized successfully");
+logAuth("Convex client initialized successfully");
 
 // Create handler with logging
 const createHandler = () => {
-  console.error("[AUTH] 🚀 NextAuth handler created at:", new Date().toISOString());
+  logAuth("NextAuth handler created", { timestamp: new Date().toISOString() });
 
   // Log Google provider configuration (without secrets)
-  console.error("[AUTH] Google Client ID starts with:", process.env.GOOGLE_CLIENT_ID?.substring(0, 10) + "...");
-  console.error("[AUTH] NextAuth secret is set:", !!process.env.NEXTAUTH_SECRET);
+  logAuth("Google provider configuration", {
+    clientIdPrefix: process.env.GOOGLE_CLIENT_ID?.substring(0, 10) + "...",
+    secretSet: !!process.env.NEXTAUTH_SECRET
+  });
 
   return NextAuth({
     debug: true, // Enable NextAuth debug mode
@@ -55,113 +80,104 @@ const createHandler = () => {
     ],
   callbacks: {
     async signIn({ user, account }) {
-      console.error("[AUTH] 🔐 signIn callback triggered at:", new Date().toISOString());
-      console.error("[AUTH] Account provider:", account?.provider);
-      console.error("[AUTH] Account type:", account?.type);
-      console.error("[AUTH] Account providerAccountId:", account?.providerAccountId);
-      console.error("[AUTH] User email:", user?.email);
-      console.error("[AUTH] User name:", user?.name);
-      console.error("[AUTH] User image:", user?.image ? "Present" : "Not present");
-      console.error("[AUTH] Full account object:", JSON.stringify(account, null, 2));
-      console.error("[AUTH] Full user object:", JSON.stringify(user, null, 2));
+      logAuth("SignIn callback triggered", {
+        provider: account?.provider,
+        accountType: account?.type,
+        providerAccountId: account?.providerAccountId,
+        userEmail: user?.email,
+        userName: user?.name,
+        hasImage: !!user?.image,
+        fullAccount: account,
+        fullUser: user
+      });
 
       if (account?.provider === "google" && user.email) {
-        console.error("[AUTH] Processing Google OAuth sign-in for user:", user.email);
+        logAuth("Processing Google OAuth sign-in", { email: user.email });
 
         try {
-          console.error("[AUTH] Attempting to upsert user to Convex...");
+          logAuth("Attempting to upsert user to Convex");
           const upsertData = {
             email: user.email,
             name: user.name || "",
             image: user.image || undefined,
             googleId: account.providerAccountId,
           };
-          console.error("[AUTH] Upsert data:", JSON.stringify(upsertData, null, 2));
 
           await convex.mutation(api.users.upsertUser, upsertData);
-          console.error("[AUTH] ✓ User upsert successful");
+          logAuth("User upsert successful");
 
-          console.error("[AUTH] Attempting to initialize queue settings...");
+          logAuth("Attempting to initialize queue settings");
           await convex.mutation(api.queue.initializeQueueSettings, {
             updatedBy: user.email,
           });
-          console.error("[AUTH] ✓ Queue settings initialization successful");
+          logAuth("Queue settings initialization successful");
 
-          console.error("[AUTH] ✓ Google OAuth sign-in completed successfully");
+          logAuth("Google OAuth sign-in completed successfully");
           return true;
         } catch (error) {
-          console.error("[AUTH] ✗ Error during Google OAuth processing:", error);
-          console.error("[AUTH] ✗ Error details:", {
+          logAuthError("Error during Google OAuth processing", {
             message: error instanceof Error ? error.message : 'Unknown error',
             stack: error instanceof Error ? error.stack : undefined,
             name: error instanceof Error ? error.name : undefined,
           });
-
-          // Log additional context
-          if (error instanceof Error) {
-            console.error("[AUTH] ✗ Error name:", error.name);
-            console.error("[AUTH] ✗ Error message:", error.message);
-            console.error("[AUTH] ✗ Error stack:", error.stack);
-          }
-
           return false;
         }
       } else {
-        console.error("[AUTH] Non-Google provider or no email provided, allowing sign-in");
+        logAuth("Non-Google provider or no email provided, allowing sign-in", {
+          provider: account?.provider,
+          hasEmail: !!user?.email
+        });
         return true;
       }
     },
     async redirect({ url, baseUrl }) {
       console.error("[AUTH] 🔀 redirect callback triggered at:", new Date().toISOString());
-      console.error("[AUTH] Original URL:", url);
-      console.error("[AUTH] Base URL:", baseUrl);
+      logAuth("Redirect callback triggered", { originalUrl: url, baseUrl });
 
       try {
         // If url is relative, resolve it relative to baseUrl
         if (url.startsWith("/")) {
           const resolvedUrl = `${baseUrl}${url}`;
-          console.error("[AUTH] ✓ Resolved relative URL to:", resolvedUrl);
+          logAuth("Resolved relative URL", { resolvedUrl });
           return resolvedUrl;
         }
 
         // If url is on the same origin as baseUrl, allow it
         const urlOrigin = new URL(url).origin;
-        console.error("[AUTH] URL origin:", urlOrigin);
-        console.error("[AUTH] Base URL origin:", baseUrl);
+        logAuth("Checking URL origin", { urlOrigin, baseUrl });
 
         if (urlOrigin === baseUrl) {
-          console.error("[AUTH] ✓ URL is on same origin, allowing redirect");
+          logAuth("URL is on same origin, allowing redirect");
           return url;
         }
 
         // Otherwise, redirect to baseUrl
-        console.error("[AUTH] ⚠ URL is from different origin, redirecting to base URL:", baseUrl);
+        logAuth("URL from different origin, redirecting to base URL", { baseUrl });
         return baseUrl;
       } catch (error) {
-        console.error("[AUTH] ✗ Error in redirect callback:", error);
-        console.error("[AUTH] ✗ Falling back to base URL:", baseUrl);
+        logAuthError("Error in redirect callback", { error: error instanceof Error ? error.message : String(error), baseUrl });
         return baseUrl;
       }
     },
     async session({ session, token }) {
-      console.error("[AUTH] 👤 session callback triggered at:", new Date().toISOString());
-      console.error("[AUTH] Session user email:", session?.user?.email);
-      console.error("[AUTH] Token sub:", token?.sub);
-      console.error("[AUTH] Token provider:", token?.provider);
+      logAuth("Session callback triggered", {
+        userEmail: session?.user?.email,
+        tokenSub: token?.sub,
+        tokenProvider: token?.provider
+      });
 
       try {
         if (session.user && token.sub) {
           (session.user as { id?: string }).id = token.sub;
-          console.error("[AUTH] ✓ Added user ID to session:", token.sub);
+          logAuth("Added user ID to session", { userId: token.sub });
         } else {
-          console.error("[AUTH] ⚠ No session.user or token.sub found, session not modified");
+          logAuth("No session.user or token.sub found, session not modified");
         }
 
-        console.error("[AUTH] ✓ Session callback completed successfully");
+        logAuth("Session callback completed successfully");
         return session;
       } catch (error) {
-        console.error("[AUTH] ✗ Error in session callback:", error);
-        console.error("[AUTH] ✗ Returning original session");
+        logAuthError("Error in session callback", error);
         return session;
       }
     },
@@ -176,19 +192,18 @@ const handler = createHandler();
 
 // Wrapper to log incoming requests
 const loggedHandler = async (request: Request, context?: any) => {
-  console.error("[AUTH] 📨 Incoming auth request:", {
+  logAuth("Incoming auth request", {
     method: request.method,
     url: request.url,
-    timestamp: new Date().toISOString(),
     headers: Object.fromEntries(request.headers.entries())
   });
 
   try {
     const result = await handler(request, context);
-    console.error("[AUTH] ✅ Auth request processed successfully");
+    logAuth("Auth request processed successfully");
     return result;
   } catch (error) {
-    console.error("[AUTH] ❌ Auth request failed:", error);
+    logAuthError("Auth request failed", error);
     throw error;
   }
 };
