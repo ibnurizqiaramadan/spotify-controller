@@ -6,6 +6,7 @@ import { api } from "../../../../../convex/_generated/api";
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 const handler = NextAuth({
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -43,6 +44,14 @@ const handler = NextAuth({
         }
       }
       return true;
+    },
+    async redirect({ url, baseUrl }) {
+      // If url is relative, resolve it relative to baseUrl
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // If url is on the same origin as baseUrl, allow it
+      if (new URL(url).origin === baseUrl) return url;
+      // Otherwise, redirect to baseUrl
+      return baseUrl;
     },
     async session({ session, token }) {
       if (session.user && token.sub) {
