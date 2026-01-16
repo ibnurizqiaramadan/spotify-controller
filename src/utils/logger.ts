@@ -1,42 +1,83 @@
-import { appendFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+// Discord webhook URL from environment
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK;
 
-// Ensure logs directory exists
-// In Next.js, process.cwd() returns the project root
-const logsDir = join(process.cwd(), 'logs');
+// Log Discord webhook status at module load
+if (DISCORD_WEBHOOK_URL) {
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'info',
+    service: 'logger',
+    message: 'Discord webhook configured',
+    data: { webhookUrl: DISCORD_WEBHOOK_URL.substring(0, 30) + '...' }
+  }));
+} else {
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'warn',
+    service: 'logger',
+    message: 'Discord webhook not configured - logs will only go to console',
+    data: { envVar: 'DISCORD_WEBHOOK' }
+  }));
+}
 
-// Initialize logs directory
-let logsDirInitialized = false;
-const ensureLogsDir = async () => {
-  if (!logsDirInitialized) {
-    try {
-      await mkdir(logsDir, { recursive: true });
-      logsDirInitialized = true;
-    } catch (error) {
-      // Directory might already exist, ignore error
-      logsDirInitialized = true;
-    }
+// Send log to Discord webhook (async, non-blocking)
+const sendToDiscord = async (level: string, message: string, data?: any, error?: any) => {
+  if (!DISCORD_WEBHOOK_URL) {
+    return; // Silently skip if webhook not configured
   }
-};
 
-// Get log file name based on current date
-const getLogFileName = (): string => {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `auth-${year}-${month}-${day}.log`;
-};
-
-// Write log to file (async, non-blocking)
-const writeToFile = async (logEntry: string) => {
   try {
-    await ensureLogsDir();
-    const logFile = join(logsDir, getLogFileName());
-    await appendFile(logFile, logEntry + '\n', 'utf-8');
+    const color = level === 'error' ? 0xff0000 : 0x00ff00; // Red for error, green for info
+    
+    // Format data for Discord embed
+    let description = `**${message}**`;
+    
+    if (data && Object.keys(data).length > 0) {
+      const dataStr = JSON.stringify(data, null, 2);
+      // Discord embed description has 4096 char limit, truncate if needed
+      if (dataStr.length > 3500) {
+        description += `\n\`\`\`json\n${dataStr.substring(0, 3500)}...\n\`\`\``;
+      } else {
+        description += `\n\`\`\`json\n${dataStr}\n\`\`\``;
+      }
+    }
+
+    if (error) {
+      const errorStr = error instanceof Error 
+        ? `${error.name}: ${error.message}\n\`\`\`${error.stack?.substring(0, 1000) || 'No stack trace'}\`\`\``
+        : JSON.stringify(error, null, 2);
+      description += `\n\n**Error:**\n${errorStr}`;
+    }
+
+    const embed = {
+      title: `🔐 Auth ${level.toUpperCase()}`,
+      description: description.substring(0, 4096), // Discord limit
+      color: color,
+      timestamp: new Date().toISOString(),
+      footer: {
+        text: 'Spotify Bot Auth Logger'
+      }
+    };
+
+    const payload = {
+      embeds: [embed]
+    };
+
+    // Send to Discord webhook (non-blocking, fire and forget)
+    // Use global fetch (available in Node.js 18+ and Next.js)
+    if (typeof fetch !== 'undefined') {
+      fetch(DISCORD_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => {
+        // Silently fail if webhook fails
+      });
+    }
   } catch (error) {
-    // Don't throw error, just log to console if file write fails
-    console.error('[LOGGER] Failed to write to log file:', error);
+    // Silently fail if webhook fails
   }
 };
 
@@ -59,30 +100,30 @@ export const logAuth = async (message: string, data?: any) => {
   // Write to console (for Open Runtime compatibility)
   console.log(logString);
   
-  // Write to file (async, non-blocking)
-  writeToFile(logString).catch(() => {
-    // Silently fail if file write fails
+  // Send to Discord webhook (async, non-blocking)
+  sendToDiscord('info', message, data).catch(() => {
+    // Silently fail if webhook fails
   });
 };
 
 // Log function for error level
 export const logAuthError = async (message: string, error?: any) => {
+  const errorData = error instanceof Error ? {
+    message: error.message,
+    name: error.name,
+    stack: error.stack
+  } : error;
+
   const logEntry = createLogEntry('error', 'auth', message, {
-    ...(error && {
-      error: error instanceof Error ? {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      } : error
-    })
+    ...(errorData && { error: errorData })
   });
   const logString = JSON.stringify(logEntry);
   
   // Write to console (for Open Runtime compatibility)
   console.error(logString);
   
-  // Write to file (async, non-blocking)
-  writeToFile(logString).catch(() => {
-    // Silently fail if file write fails
+  // Send to Discord webhook (async, non-blocking)
+  sendToDiscord('error', message, undefined, error).catch(() => {
+    // Silently fail if webhook fails
   });
 };
