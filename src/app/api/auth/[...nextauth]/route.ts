@@ -2,29 +2,7 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
-
-// Environment variable validation and logging
-const logAuth = (message: string, data?: any) => {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level: 'info',
-    service: 'auth',
-    message,
-    ...(data && { data })
-  };
-  console.log(JSON.stringify(logEntry));
-};
-
-const logAuthError = (message: string, error?: any) => {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level: 'error',
-    service: 'auth',
-    message,
-    ...(error && { error: error.message || error })
-  };
-  console.error(JSON.stringify(logEntry));
-};
+import { logAuth, logAuthError } from "../../../../utils/logger";
 
 logAuth("Initializing NextAuth configuration");
 logAuth("Checking environment variables");
