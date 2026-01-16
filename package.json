@@ -13,6 +13,7 @@
   "dependencies": {
     "@auth/core": "^0.37.4",
     "@convex-dev/auth": "^0.0.90",
+    "@heroui/autocomplete": "^2.3.31",
     "@heroui/react": "^2.8.7",
     "@heroui/theme": "2.4.23",
     "convex": "^1.31.2",

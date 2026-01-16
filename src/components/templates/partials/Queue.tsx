@@ -200,7 +200,7 @@ export default function Queue() {
           {convexQueue && convexQueue.length > 0 ? (
             convexQueue.map((item, index) => (
               <QueueItem 
-                key={item._id} 
+                key={`${item._id}-${index}`} 
                 item={convexTrackToSpotifyTrack(item)} 
                 addedBy={item.addedBy}
               />
@@ -225,7 +225,7 @@ export default function Queue() {
           {filteredSystemQueue.length > 0 ? (
             filteredSystemQueue.map((item, index) => (
               <QueueItem 
-                key={`spotify-${item.id}`} 
+                key={`spotify-${item.id}-${index}`} 
                 item={item} 
               />
             ))

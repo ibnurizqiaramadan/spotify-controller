@@ -41,7 +41,7 @@ export default function ListDevice() {
             <AutocompleteSection>
               {app?.devices &&
                 app.devices.devices.map((device) => (
-                  <AutocompleteItem key={device.id} value={device.id}>
+                  <AutocompleteItem key={device.id}>
                     {device.name}
                   </AutocompleteItem>
                 ))}
