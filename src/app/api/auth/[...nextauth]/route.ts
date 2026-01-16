@@ -46,7 +46,8 @@ logAuth("All required environment variables are present", {
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? "✓ Set" : "✗ Missing",
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? "✓ Set" : "✗ Missing",
   NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ? "✓ Set" : "✗ Missing",
-  NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ? "✓ Set" : "✗ Missing"
+  NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL ? "✓ Set" : "✗ Missing",
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL || "⚠ NOT SET - This may cause redirect issues!"
 });
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
@@ -62,9 +63,22 @@ const createHandler = () => {
     secretSet: !!process.env.NEXTAUTH_SECRET
   });
 
+  // Determine base URL - prioritize NEXTAUTH_URL, fallback to auto-detection
+  const baseUrl = process.env.NEXTAUTH_URL || 'auto-detect';
+  logAuth("NextAuth configuration", {
+    baseUrl: baseUrl,
+    debug: true,
+    hasSecret: !!process.env.NEXTAUTH_SECRET
+  });
+
   return NextAuth({
     debug: true, // Enable NextAuth debug mode
     secret: process.env.NEXTAUTH_SECRET,
+    // Explicitly set base URL if provided
+    ...(process.env.NEXTAUTH_URL && {
+      basePath: '/api/auth',
+      baseUrl: process.env.NEXTAUTH_URL
+    }),
     providers: [
       GoogleProvider({
         clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -131,31 +145,54 @@ const createHandler = () => {
       }
     },
     async redirect({ url, baseUrl }) {
-      console.error("[AUTH] 🔀 redirect callback triggered at:", new Date().toISOString());
-      logAuth("Redirect callback triggered", { originalUrl: url, baseUrl });
+      logAuth("Redirect callback triggered", {
+        originalUrl: url,
+        baseUrl: baseUrl,
+        nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
+        urlIsRelative: url.startsWith("/"),
+        urlOrigin: url.startsWith("/") ? null : new URL(url).origin
+      });
 
       try {
         // If url is relative, resolve it relative to baseUrl
         if (url.startsWith("/")) {
           const resolvedUrl = `${baseUrl}${url}`;
-          logAuth("Resolved relative URL", { resolvedUrl });
+          logAuth("Resolved relative URL", {
+            originalUrl: url,
+            baseUrl: baseUrl,
+            resolvedUrl: resolvedUrl
+          });
           return resolvedUrl;
         }
 
         // If url is on the same origin as baseUrl, allow it
         const urlOrigin = new URL(url).origin;
-        logAuth("Checking URL origin", { urlOrigin, baseUrl });
+        const baseUrlOrigin = new URL(baseUrl).origin;
+        
+        logAuth("Checking URL origin", {
+          urlOrigin: urlOrigin,
+          baseUrlOrigin: baseUrlOrigin,
+          originsMatch: urlOrigin === baseUrlOrigin
+        });
 
-        if (urlOrigin === baseUrl) {
-          logAuth("URL is on same origin, allowing redirect");
+        if (urlOrigin === baseUrlOrigin) {
+          logAuth("URL is on same origin, allowing redirect", { finalUrl: url });
           return url;
         }
 
         // Otherwise, redirect to baseUrl
-        logAuth("URL from different origin, redirecting to base URL", { baseUrl });
+        logAuth("URL from different origin, redirecting to base URL", {
+          urlOrigin: urlOrigin,
+          baseUrlOrigin: baseUrlOrigin,
+          finalUrl: baseUrl
+        });
         return baseUrl;
       } catch (error) {
-        logAuthError("Error in redirect callback", { error: error instanceof Error ? error.message : String(error), baseUrl });
+        logAuthError("Error in redirect callback", {
+          error: error instanceof Error ? error.message : String(error),
+          baseUrl: baseUrl,
+          originalUrl: url
+        });
         return baseUrl;
       }
     },
@@ -192,10 +229,22 @@ const handler = createHandler();
 
 // Wrapper to log incoming requests
 const loggedHandler = async (request: Request, context?: any) => {
+  const requestUrl = new URL(request.url);
+  const host = request.headers.get('host') || 'unknown';
+  const origin = request.headers.get('origin') || 'unknown';
+  const referer = request.headers.get('referer') || 'unknown';
+  
   logAuth("Incoming auth request", {
     method: request.method,
-    url: request.url,
-    headers: Object.fromEntries(request.headers.entries())
+    fullUrl: request.url,
+    pathname: requestUrl.pathname,
+    searchParams: Object.fromEntries(requestUrl.searchParams.entries()),
+    host: host,
+    origin: origin,
+    referer: referer,
+    protocol: requestUrl.protocol,
+    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
+    expectedCallbackUrl: `${requestUrl.protocol}//${host}/api/auth/callback/google`
   });
 
   try {
