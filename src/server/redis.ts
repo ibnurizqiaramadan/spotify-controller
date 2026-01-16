@@ -3,7 +3,9 @@
 import { createClient } from "redis";
 
 const redis = createClient({
-  url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
+  url: process.env.REDIS_PASS
+    ? `redis://:${process.env.REDIS_PASS}@${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`
+    : `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
   database: Number(process.env.REDIS_DB),
 });
 
