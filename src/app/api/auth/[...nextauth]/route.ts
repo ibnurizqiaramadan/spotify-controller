@@ -42,22 +42,47 @@ const createHandler = () => {
     secretSet: !!process.env.NEXTAUTH_SECRET
   });
 
-  // Determine base URL - prioritize NEXTAUTH_URL, fallback to auto-detection
-  const baseUrl = process.env.NEXTAUTH_URL || 'auto-detect';
+  // Validate and normalize NEXTAUTH_URL - must be HTTPS
+  let nextAuthBaseUrl: string | undefined = process.env.NEXTAUTH_URL;
+  if (nextAuthBaseUrl) {
+    try {
+      const url = new URL(nextAuthBaseUrl);
+      // Force HTTPS if not already HTTPS
+      if (url.protocol !== 'https:') {
+        url.protocol = 'https:';
+        nextAuthBaseUrl = url.toString();
+        logAuth("NEXTAUTH_URL protocol corrected to HTTPS", {
+          original: process.env.NEXTAUTH_URL,
+          corrected: nextAuthBaseUrl
+        });
+      }
+    } catch (error) {
+      logAuthError("Invalid NEXTAUTH_URL format", error);
+      nextAuthBaseUrl = undefined;
+    }
+  }
+
+  if (!nextAuthBaseUrl) {
+    logAuthError("NEXTAUTH_URL is not set - authentication may fail!", {
+      message: "NEXTAUTH_URL must be set to your production domain with https:// protocol"
+    });
+  }
+
   logAuth("NextAuth configuration", {
-    baseUrl: baseUrl,
+    baseUrl: nextAuthBaseUrl || 'NOT SET',
     debug: true,
-    hasSecret: !!process.env.NEXTAUTH_SECRET
+    hasSecret: !!process.env.NEXTAUTH_SECRET,
+    baseUrlProtocol: nextAuthBaseUrl ? new URL(nextAuthBaseUrl).protocol : 'unknown'
   });
 
   return NextAuth({
     debug: true, // Enable NextAuth debug mode
     secret: process.env.NEXTAUTH_SECRET,
-    // Explicitly set base URL if provided
+    // Explicitly set base URL - always use HTTPS
     // Note: Set AUTH_TRUST_HOST=true environment variable for proxy/load balancer deployments
-    ...(process.env.NEXTAUTH_URL && {
+    ...(nextAuthBaseUrl && {
       basePath: '/api/auth',
-      baseUrl: process.env.NEXTAUTH_URL
+      baseUrl: nextAuthBaseUrl // This ensures all NextAuth URLs use HTTPS
     }),
     providers: [
       GoogleProvider({
@@ -125,29 +150,65 @@ const createHandler = () => {
       }
     },
     async redirect({ url, baseUrl }) {
+      // Force baseUrl to use HTTPS from NEXTAUTH_URL if available
+      let finalBaseUrl = baseUrl;
+      if (process.env.NEXTAUTH_URL) {
+        try {
+          const nextAuthUrl = new URL(process.env.NEXTAUTH_URL);
+          // Use NEXTAUTH_URL as baseUrl to ensure HTTPS
+          finalBaseUrl = nextAuthUrl.origin;
+        } catch {
+          // Keep original baseUrl if NEXTAUTH_URL is invalid
+        }
+      }
+
+      // Helper to force HTTPS on a URL
+      const forceHttps = (urlString: string): string => {
+        try {
+          const urlObj = new URL(urlString);
+          if (urlObj.protocol !== 'https:') {
+            urlObj.protocol = 'https:';
+            return urlObj.toString();
+          }
+          return urlString;
+        } catch {
+          return urlString;
+        }
+      };
+
       logAuth("Redirect callback triggered", {
         originalUrl: url,
         baseUrl: baseUrl,
+        finalBaseUrl: finalBaseUrl,
         nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
         urlIsRelative: url.startsWith("/"),
-        urlOrigin: url.startsWith("/") ? null : new URL(url).origin
+        urlOrigin: url.startsWith("/") ? null : (() => {
+          try {
+            return new URL(url).origin;
+          } catch {
+            return null;
+          }
+        })()
       });
 
       try {
-        // If url is relative, resolve it relative to baseUrl
+        // If url is relative, resolve it relative to finalBaseUrl (which is HTTPS)
         if (url.startsWith("/")) {
-          const resolvedUrl = `${baseUrl}${url}`;
+          const resolvedUrl = `${finalBaseUrl}${url}`;
+          const httpsUrl = forceHttps(resolvedUrl);
           logAuth("Resolved relative URL", {
             originalUrl: url,
             baseUrl: baseUrl,
-            resolvedUrl: resolvedUrl
+            finalBaseUrl: finalBaseUrl,
+            resolvedUrl: resolvedUrl,
+            finalHttpsUrl: httpsUrl
           });
-          return resolvedUrl;
+          return httpsUrl;
         }
 
-        // If url is on the same origin as baseUrl, allow it
+        // If url is on the same origin as baseUrl, allow it but force HTTPS
         const urlOrigin = new URL(url).origin;
-        const baseUrlOrigin = new URL(baseUrl).origin;
+        const baseUrlOrigin = new URL(finalBaseUrl).origin;
         
         logAuth("Checking URL origin", {
           urlOrigin: urlOrigin,
@@ -156,24 +217,29 @@ const createHandler = () => {
         });
 
         if (urlOrigin === baseUrlOrigin) {
-          logAuth("URL is on same origin, allowing redirect", { finalUrl: url });
-          return url;
+          const httpsUrl = forceHttps(url);
+          logAuth("URL is on same origin, allowing redirect (forced HTTPS)", {
+            originalUrl: url,
+            finalHttpsUrl: httpsUrl
+          });
+          return httpsUrl;
         }
 
-        // Otherwise, redirect to baseUrl
-        logAuth("URL from different origin, redirecting to base URL", {
+        // Otherwise, redirect to finalBaseUrl (which is HTTPS)
+        logAuth("URL from different origin, redirecting to base URL (HTTPS)", {
           urlOrigin: urlOrigin,
           baseUrlOrigin: baseUrlOrigin,
-          finalUrl: baseUrl
+          finalUrl: finalBaseUrl
         });
-        return baseUrl;
+        return finalBaseUrl;
       } catch (error) {
         logAuthError("Error in redirect callback", {
           error: error instanceof Error ? error.message : String(error),
           baseUrl: baseUrl,
+          finalBaseUrl: finalBaseUrl,
           originalUrl: url
         });
-        return baseUrl;
+        return finalBaseUrl;
       }
     },
     async session({ session, token }) {
