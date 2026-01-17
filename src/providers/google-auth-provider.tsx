@@ -4,6 +4,29 @@ import { createContext, useContext, useEffect, useState, ReactNode, useRef } fro
 import { ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { logAuth, logAuthError } from '../utils/logger';
+import { decodeGoogleJWT } from '../utils/jwt';
+
+// Cookie utilities
+const setCookie = (name: string, value: string, days: number = 7) => {
+  const expires = new Date();
+  expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+  document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax;Secure`;
+};
+
+const getCookie = (name: string): string | null => {
+  const nameEQ = name + "=";
+  const ca = document.cookie.split(';');
+  for (let i = 0; i < ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  }
+  return null;
+};
+
+const deleteCookie = (name: string) => {
+  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+};
 
 declare global {
   interface Window {
@@ -49,6 +72,7 @@ interface GoogleAuthContextType {
   signIn: () => void;
   signOut: () => void;
   loginButtonRef: React.RefObject<HTMLDivElement | null>;
+  token: string | null;
 }
 
 const GoogleAuthContext = createContext<GoogleAuthContextType | undefined>(undefined);
@@ -57,6 +81,7 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<GoogleUser | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const loginButtonRef = useRef<HTMLDivElement | null>(null);
 
@@ -89,14 +114,15 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
           });
 
           try {
+            // Store JWT token in cookie
+            setCookie('google_jwt', response.credential, 7); // 7 days expiry
+            setToken(response.credential);
+
             // Decode the JWT token to get user info
-            const payload = JSON.parse(atob(response.credential.split('.')[1]));
-            const googleUser = {
-              id: payload.sub,
-              email: payload.email,
-              name: payload.name,
-              image: payload.picture,
-            };
+            const googleUser = decodeGoogleJWT(response.credential);
+            if (!googleUser) {
+              throw new Error("Failed to decode JWT token");
+            }
 
             logAuth("Decoded Google user info", {
               email: googleUser.email,
@@ -128,16 +154,19 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      // Check if user is already signed in (from localStorage or session)
-      const storedUser = localStorage.getItem('google_user');
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          logAuth("Restored user from localStorage", { email: parsedUser.email });
-        } catch (error) {
-          logAuthError("Error parsing stored user data", error);
-          localStorage.removeItem('google_user');
+      // Check if user is already signed in (from cookie)
+      const storedToken = getCookie('google_jwt');
+      if (storedToken) {
+        logAuth("Found JWT token in cookie, validating...");
+        const decodedUser = decodeGoogleJWT(storedToken);
+        if (decodedUser) {
+          setToken(storedToken);
+          setUser(decodedUser);
+          logAuth("Restored user from JWT cookie", { email: decodedUser.email });
+        } else {
+          // Token is invalid or expired, remove it
+          deleteCookie('google_jwt');
+          logAuth("Removed invalid/expired JWT token from cookie");
         }
       }
 
@@ -177,20 +206,14 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
   const signOut = () => {
     logAuth("Signing out user", { email: user?.email });
     setUser(null);
-    localStorage.removeItem('google_user');
+    setToken(null);
+    deleteCookie('google_jwt');
     // Optionally revoke the token
     if (window.google?.accounts?.id) {
       // Note: GIS doesn't have a direct sign out method
       // You might need to handle this differently
     }
   };
-
-  // Store user data when it changes
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('google_user', JSON.stringify(user));
-    }
-  }, [user]);
 
   const value: GoogleAuthContextType = {
     user,
@@ -199,6 +222,7 @@ export function GoogleAuthProvider({ children }: { children: ReactNode }) {
     signIn,
     signOut,
     loginButtonRef,
+    token,
   };
 
   return (
