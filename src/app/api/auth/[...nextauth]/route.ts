@@ -214,27 +214,28 @@ const loggedHandler = async (request: Request, context?: any) => {
   const origin = request.headers.get('origin') || 'unknown';
   const referer = request.headers.get('referer') || 'unknown';
   
-  // Detect correct protocol
-  // Priority: x-forwarded-proto header > NEXTAUTH_URL > request protocol
+  // Force HTTPS for callback URL since app is always behind SSL/HTTPS
+  // Even if internal request uses http://, external access is always https://
+  const expectedCallbackUrl = `https://${host}/api/auth/callback/google`;
+  
+  // Detect protocol for logging purposes only
   const forwardedProto = request.headers.get('x-forwarded-proto');
   const nextAuthUrl = process.env.NEXTAUTH_URL;
-  let correctProtocol = requestUrl.protocol;
+  let detectedProtocol = requestUrl.protocol;
   
   if (forwardedProto) {
-    correctProtocol = forwardedProto.includes('https') ? 'https:' : 'http:';
+    detectedProtocol = forwardedProto.includes('https') ? 'https:' : 'http:';
   } else if (nextAuthUrl) {
     try {
       const nextAuthUrlObj = new URL(nextAuthUrl);
-      correctProtocol = nextAuthUrlObj.protocol;
+      detectedProtocol = nextAuthUrlObj.protocol;
     } catch {
       // Keep request protocol if NEXTAUTH_URL is invalid
     }
   }
   
-  const expectedCallbackUrl = `${correctProtocol}//${host}/api/auth/callback/google`;
-  
-  // Check for protocol mismatch
-  const protocolMismatch = requestUrl.protocol !== correctProtocol;
+  // Check for protocol mismatch (for logging only, callback URL always uses HTTPS)
+  const protocolMismatch = requestUrl.protocol !== 'https:' && detectedProtocol !== 'https:';
   
   logAuth("Incoming auth request", {
     method: request.method,
@@ -245,19 +246,20 @@ const loggedHandler = async (request: Request, context?: any) => {
     origin: origin,
     referer: referer,
     requestProtocol: requestUrl.protocol,
-    correctProtocol: correctProtocol,
+    detectedProtocol: detectedProtocol,
+    callbackUrlProtocol: 'https:', // Always HTTPS
     protocolMismatch: protocolMismatch,
     forwardedProto: forwardedProto || 'not-set',
     nextAuthUrl: nextAuthUrl || 'NOT SET',
     expectedCallbackUrl: expectedCallbackUrl,
-    warning: protocolMismatch ? '⚠️ Protocol mismatch detected! Callback URL may be incorrect.' : null
+    note: 'Callback URL forced to HTTPS since app is always behind SSL/HTTPS'
   });
   
   if (protocolMismatch) {
-    logAuthError("Protocol mismatch detected", {
+    logAuth("Protocol mismatch detected (internal vs external)", {
       requestProtocol: requestUrl.protocol,
-      correctProtocol: correctProtocol,
-      message: "Request uses different protocol than NEXTAUTH_URL. This may cause callback URL mismatch in Google OAuth."
+      detectedProtocol: detectedProtocol,
+      message: "Internal request uses different protocol, but callback URL is forced to HTTPS for external access."
     });
   }
 
