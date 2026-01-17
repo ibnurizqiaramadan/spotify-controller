@@ -1,8 +1,8 @@
 "use client";
 
-import { SessionProvider as NextAuthSessionProvider } from "next-auth/react";
 import { ReactNode } from "react";
+import { GoogleAuthProvider } from "./google-auth-provider";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  return <NextAuthSessionProvider>{children}</NextAuthSessionProvider>;
+  return <GoogleAuthProvider>{children}</GoogleAuthProvider>;
 }

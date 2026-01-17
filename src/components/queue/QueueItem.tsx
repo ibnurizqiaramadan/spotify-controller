@@ -2,7 +2,7 @@
 
 import { Image } from "@heroui/react";
 import { Track } from "@/data/responseTypes";
-import { useSession } from "next-auth/react";
+import { useGoogleAuth } from "@/providers/google-auth-provider";
 const QueueItem = ({
   item,
   currentPlaying = false,
@@ -12,8 +12,8 @@ const QueueItem = ({
   currentPlaying?: boolean;
   addedBy?: string;
 }) => {
-  const { data: session } = useSession();
-  const isCurrentUser = session?.user?.email === addedBy;
+  const { user: googleUser } = useGoogleAuth();
+  const isCurrentUser = googleUser?.email === addedBy;
   return (
     <div className="rounded-xl flex flex-row h-[85px] items-center hover:bg-zinc-800/60 active:bg-zinc-800 transition-all duration-200 border border-transparent hover:border-zinc-700/30 group">
       <div className="relative">

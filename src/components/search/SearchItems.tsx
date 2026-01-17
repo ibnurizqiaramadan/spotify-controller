@@ -7,12 +7,13 @@ import { useAddToQueue } from "@/data/layer/queue-client";
 import { appStore } from "@/stores/AppStores";
 import { useState } from "react";
 import { useCurrentConvexUser } from "@/hooks/use-current-convex-user";
-import { signIn } from "next-auth/react";
+import { useGoogleAuth } from "@/providers/google-auth-provider";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 const SearchItems = ({ item }: { item: Track }) => {
   const { setRefreshQueue } = appStore();
   const { user, isAuthenticated } = useCurrentConvexUser();
+  const { signIn: googleSignIn } = useGoogleAuth();
   const { addToQueue: addToConvexQueue } = useAddToQueue();
   const queueSettings = useQuery(api.queue.getQueueSettings);
 
@@ -30,7 +31,7 @@ const SearchItems = ({ item }: { item: Track }) => {
         // Check if user is authenticated
         if (!isAuthenticated || !user) {
           // Redirect to Google sign in
-          signIn("google", { callbackUrl: "/" });
+          googleSignIn();
           return;
         }
         

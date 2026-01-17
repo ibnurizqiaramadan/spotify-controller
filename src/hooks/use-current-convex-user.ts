@@ -1,21 +1,21 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useSession } from "next-auth/react";
+import { useGoogleAuth } from "@/providers/google-auth-provider";
 
 export const useCurrentConvexUser = () => {
-  const { data: session, status } = useSession();
-  
+  const { user: googleUser, isLoading, isAuthenticated } = useGoogleAuth();
+
   const user = useQuery(
     api.users.getUserByEmail,
-    status === "authenticated" && session.user?.email 
-      ? { email: session.user.email } 
+    isAuthenticated && googleUser?.email
+      ? { email: googleUser.email }
       : "skip"
   );
 
   return {
     user,
-    isLoading: status === "loading" || user === undefined,
-    isAuthenticated: status === "authenticated",
-    session,
+    isLoading: isLoading || user === undefined,
+    isAuthenticated,
+    session: googleUser ? { user: googleUser } : null,
   };
 };

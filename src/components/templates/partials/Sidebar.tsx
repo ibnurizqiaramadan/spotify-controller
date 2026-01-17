@@ -9,8 +9,8 @@ import PlaylistItems from "@/components/sidebars/Playlistitems";
 import { Button, Tabs, Tab, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Input, Textarea, Switch, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { signIn } from "next-auth/react";
 import { useCurrentConvexUser } from "@/hooks/use-current-convex-user";
+import { useGoogleAuth } from "@/providers/google-auth-provider";
 import { Doc } from "../../../../convex/_generated/dataModel";
 
 const Sidebar = () => {
@@ -31,6 +31,7 @@ const Sidebar = () => {
 
   // Get authenticated user and playlists
   const { user, isAuthenticated, isLoading } = useCurrentConvexUser();
+  const { signIn: googleSignIn } = useGoogleAuth();
   const convexPlaylists = useQuery(
     api.playlists.getUserPlaylists,
     user ? { ownerId: user._id } : "skip"
@@ -421,7 +422,7 @@ const Sidebar = () => {
                         color="success"
                         variant="flat"
                         size="sm"
-                        onPress={() => signIn("google", { callbackUrl: "/" })}
+                        onPress={googleSignIn}
                         className="bg-green-600 hover:bg-green-700 text-white"
                       >
                         <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">

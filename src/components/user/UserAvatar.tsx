@@ -1,16 +1,16 @@
 "use client";
 
 import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Avatar, Switch } from "@heroui/react";
-import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useCurrentConvexUser } from "@/hooks/use-current-convex-user";
+import { useGoogleAuth } from "@/providers/google-auth-provider";
 
 export default function UserAvatar() {
-  const { data: session, status } = useSession();
+  const { user: googleUser, isLoading, isAuthenticated, signOut } = useGoogleAuth();
   const router = useRouter();
-  const { user, isAuthenticated } = useCurrentConvexUser();
+  const { user, isAuthenticated: isConvexAuthenticated } = useCurrentConvexUser();
   const queueSettings = useQuery(api.queue.getQueueSettings);
   const updateQueueSettings = useMutation(api.queue.updateQueueSettings);
 
@@ -25,18 +25,18 @@ export default function UserAvatar() {
     }
   };
 
-  if (status === "loading") {
+  if (isLoading) {
     return (
       <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse"></div>
     );
   }
 
-  if (status === "unauthenticated") {
+  if (!isAuthenticated) {
     return null;
   }
 
-  const handleSignOut = async () => {
-    await signOut({ redirect: false });
+  const handleSignOut = () => {
+    signOut();
     router.push("/");
   };
 
@@ -46,8 +46,8 @@ export default function UserAvatar() {
         <Avatar
           as="button"
           className="transition-transform"
-          src={session?.user?.image || undefined}
-          name={session?.user?.name || "User"}
+          src={googleUser?.image || undefined}
+          name={googleUser?.name || "User"}
           size="sm"
           showFallback
           fallback={
@@ -64,7 +64,7 @@ export default function UserAvatar() {
       <DropdownMenu aria-label="Profile Actions" variant="flat">
         <DropdownItem key="profile" className="h-14 gap-2">
           <p className="font-semibold">Signed in as</p>
-          <p className="font-normal">{session?.user?.email}</p>
+          <p className="font-normal">{googleUser?.email}</p>
         </DropdownItem>
         <DropdownItem 
           key="acceptRequests" 
